@@ -1,5 +1,7 @@
 # TaskFlow
 
+> **New here or an AI assistant?** Read [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) for the full project overview. If something breaks, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
 A team task, QA and issue management app with an Asana-style workflow. It has projects, a drag-and-drop board, role-based dashboards and a real **Developer → QA → fix → retest** workflow with test reports and file evidence.
 
 | Layer | Tech |
