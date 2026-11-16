@@ -55,6 +55,8 @@ export function errorMessage(err: unknown, fallback = 'Something went wrong. Ple
     const data = err.response?.data as { error?: { message?: string } } | undefined;
     if (data?.error?.message) return data.error.message;
     if (!err.response) return 'Cannot reach the server. Check your connection or that the API is running.';
+    // A 5xx with no JSON error body comes from a proxy/gateway, not our API (e.g. the backend is not running).
+    if (err.response.status >= 500) return 'The API server is not responding. Make sure the backend is running (cd backend; npm run dev).';
   }
   if (err instanceof Error && err.message) return err.message;
   return fallback;
