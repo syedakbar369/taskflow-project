@@ -1,0 +1,33 @@
+# Render Blueprint for the TaskFlow API (Express + Socket.IO).
+# Render dashboard -> New -> Blueprint -> select this repo. Fill the "sync: false" values when prompted.
+services:
+  - type: web
+    name: taskflow-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    # Applies pending Prisma migrations to Neon, then starts the server.
+    startCommand: npm run start:prod
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false # Neon POOLED connection string
+      - key: DIRECT_URL
+        sync: false # Neon DIRECT connection string
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: CORS_ORIGINS
+        sync: false # e.g. https://taskflow.vercel.app,https://*.vercel.app
+      - key: ALLOW_SIGNUP
+        value: "true"
+      - key: UPLOAD_DIR
+        value: ./uploads
+      - key: MAX_UPLOAD_MB
+        value: "25"

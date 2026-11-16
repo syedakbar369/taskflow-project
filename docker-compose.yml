@@ -1,0 +1,16 @@
+# Optional local PostgreSQL for development (alternative to Neon).
+#   docker compose up -d
+# Then use DATABASE_URL=postgresql://taskflow:taskflow@localhost:5432/taskflow?schema=public
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taskflow
+      POSTGRES_PASSWORD: taskflow
+      POSTGRES_DB: taskflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - taskflow-pg:/var/lib/postgresql/data
+volumes:
+  taskflow-pg:

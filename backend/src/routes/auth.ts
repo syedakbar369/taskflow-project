@@ -15,7 +15,7 @@ export const authRouter = Router();
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: env.isTest ? 1000 : 30,
+  limit: env.isTest ? 1000 : env.AUTH_RATE_LIMIT,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many attempts. Please wait a few minutes and try again.' } },

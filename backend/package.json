@@ -19,7 +19,8 @@
     "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "create-admin": "tsx prisma/create-admin.ts"
+    "create-admin": "tsx prisma/create-admin.ts",
+    "start:prod": "prisma migrate deploy && node dist/index.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

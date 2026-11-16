@@ -14,6 +14,8 @@ const schema = z.object({
     .string()
     .default('true')
     .transform((v) => v.toLowerCase() === 'true'),
+  // Max login/signup attempts per IP per 15 minutes.
+  AUTH_RATE_LIMIT: z.coerce.number().int().positive().default(30),
   COOKIE_SECURE: z.string().optional(),
   TRUST_PROXY: z.string().optional(),
 });
