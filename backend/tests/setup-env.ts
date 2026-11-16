@@ -11,3 +11,4 @@ process.env.CORS_ORIGINS = 'http://localhost:5173';
 process.env.UPLOAD_DIR = path.join(os.tmpdir(), 'taskflow-test-uploads');
 process.env.MAX_UPLOAD_MB = '1';
 process.env.ALLOW_SIGNUP = 'true';
+process.env.CRON_SECRET = 'test-cron-secret';

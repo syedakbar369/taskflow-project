@@ -21,6 +21,7 @@ import { notificationsRouter } from './routes/notifications';
 import { reportsRouter } from './routes/reports';
 import { dashboardRouter } from './routes/dashboard';
 import { activityRouter, searchRouter } from './routes/misc';
+import { runDueDateCheck } from './jobs/dueDates';
 
 export function corsOrigin(origin: string | undefined, cb: (err: Error | null, allow?: boolean) => void) {
   // Non-browser clients (curl, health checks) send no Origin header.
@@ -65,6 +66,16 @@ export function createApp() {
   });
   app.get('/', (_req, res) => {
     res.json({ name: 'TaskFlow API', health: '/api/health' });
+  });
+
+  // Scheduled due-date reminders. On Vercel, Vercel Cron calls this (see vercel.json) with
+  // "Authorization: Bearer <CRON_SECRET>". Locally, src/index.ts runs the same job on a timer.
+  app.get('/api/cron/due-dates', async (req, res) => {
+    if (!env.CRON_SECRET || req.headers.authorization !== `Bearer ${env.CRON_SECRET}`) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid cron secret' } });
+      return;
+    }
+    res.json({ ok: true, ...(await runDueDateCheck()) });
   });
 
   app.use('/api/auth', authRouter);

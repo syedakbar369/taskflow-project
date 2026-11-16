@@ -15,22 +15,34 @@ Legend: ✅ done and verified · 🟡 done, needs an external step · ⬜ not do
 | 6 | Comments (edit/soft-delete with audit, @mentions), labels, attachments, activity | ✅ | backend tests, browser E2E |
 | 7 | QA workflow: submit → test → fail/reopen → resubmit → pass/Done, immutable reports | ✅ | `qa-workflow.test.ts`, browser E2E |
 | 8 | Dashboards (role-aware), reports, notifications, Socket.IO real-time | ✅ | `files-notifications-reports.test.ts`, `realtime-e2e.test.ts`, browser E2E |
-| 9 | Responsive layout, accessibility (focus states, ARIA, keyboard drag), GSAP with reduced motion | ✅ | Mobile screenshots (390px) |
-| 10 | Tests, deployment config (Vercel/Render/Neon), documentation | ✅ | — |
-| — | GitHub repository created and pushed | 🟡 | `gh` CLI not installed; see README / final notes |
-| — | Production deploy (Vercel + Render + Neon) | 🟡 | Configured; needs your accounts and credentials |
+| 9 | Responsive layout, accessibility, GSAP with reduced motion | ✅ | Mobile screenshots (390px) |
+| 10 | Tests and documentation | ✅ | — |
+| 11 | **Vercel-only deployment** (frontend + backend as two Vercel projects) | ✅ code / 🟡 deploy | `vercel.test.ts`, browser E2E against `api/server.ts` |
+| — | GitHub push | 🟡 | You push from your machine |
+| — | Production deploy on Vercel + Neon | 🟡 | Needs your accounts and credentials (see README §3–4) |
 
-## Required screens
-Login ✅ · Signup ✅ · Logout ✅ · Dashboard (4 role variants) ✅ · Projects list ✅ · Create/edit project ✅ · Project overview ✅ · Board ✅ · List view ✅ · Task create/edit ✅ · Task drawer (Overview/Comments/QA/Attachments/Activity) ✅ · Team / user management ✅ · QA Center ✅ · QA report create/view ✅ · Reports ✅ · Notifications ✅ · Settings/profile ✅ · Activity log ✅ · 404 / 403 ✅
+## Vercel deployment work (2026-11-17)
+- `backend/api/server.ts`: Vercel Function entry exporting the `http.Server` (Express + Socket.IO).
+- `backend/vercel.json`: framework "Other", rewrites all paths to the function, `maxDuration: 300`, daily cron.
+- Socket.IO: WebSocket-only client transport, JWT handshake auth, auto-reconnect with data re-fetch, 30s polling fallback while disconnected, optional **Redis adapter** (`REDIS_URL`) for cross-instance broadcasts.
+- Uploads: private **Vercel Blob** driver (auto-selected when a Blob store is connected). 4 MB default limit on Vercel.
+- Due-date reminders: `/api/cron/due-dates` protected by `CRON_SECRET` (Vercel Cron), with the local timer kept for development.
+- Removed `render.yaml` and every Render/onrender reference. Env templates rewritten.
+- `backend/tsconfig.json`: `moduleResolution` changed from deprecated `Node` (node10) to `Node16`. This fixes the red error in VS Code's bundled TypeScript 6.
 
 ## Test results (latest run)
-- Backend: **35/35** Vitest + Supertest integration tests against real PostgreSQL. These include Socket.IO and the full 13-step acceptance scenario.
-- Frontend: **15/15** Vitest + Testing Library tests.
-- Browser end-to-end (Playwright, run locally against the dev servers): **18/18** checks covering signup, login, the four dashboards, board drag persistence, revert, live sync between two users, the full QA fail→fix→pass cycle, uploads, reports, mobile layout and logout.
-- `tsc` strict type checks pass for both apps. Production builds pass (frontend `vite build`, backend `tsc`). The backend was started with `NODE_ENV=production` and CORS allowlisting was verified.
+- Backend: **38/38** with Redis available (37 passed + 1 skipped without `TEST_REDIS_URL`). This includes the cron endpoint, the `api/server.ts` export, and **two separate server instances relaying a live event through Redis**.
+- Frontend: **15/15**.
+- Browser end-to-end (Playwright, run locally): **18/18**, run against the **Vercel entry `api/server.ts`** with the WebSocket-only client and Redis adapter (signup, login, four dashboards, drag persistence, revert, live two-user sync, full QA fail→fix→pass, uploads, reports, mobile, logout).
+- `tsc` strict checks pass for both apps (VS Code shows no errors). The frontend production build passes with `VITE_API_URL` set.
 
-## Known limitations / follow-ups
-- Uploaded files are stored on local disk. On Render's free plan that disk is ephemeral; use a Render Disk or implement the S3 `StorageDriver` for persistent files.
-- Rate limiting uses in-memory counters (one instance). Multiple API instances would need a shared store such as Redis.
-- Due-date reminders run in-process every 15 minutes. They don't run while a free Render service is asleep.
-- There is no email delivery. Admins share the generated temporary passwords manually.
+## Not verified (cannot be tested without your Vercel account)
+- An actual Vercel deployment. Two items are confirmed from Vercel's documentation but not run on Vercel itself: (1) WebSocket upgrades on `/socket.io` reach the function through the `vercel.json` rewrite, and (2) Prisma's engine is bundled into the function. If WebSocket connections fail after deploying, see README §4c.
+- The Vercel Blob driver against a real Blob store. It is written against `@vercel/blob` 2.9 (`put`/`get`/`del` with `access: 'private'`), but no real store was available locally.
+
+## Known limitations
+- Without `REDIS_URL`, real-time events only reach users connected to the same function instance (others catch up on reconnect or the 30s refresh).
+- WebSocket connections are closed at the function max duration (300s on Hobby) and reconnect automatically.
+- Login rate limiting is per instance. Use Vercel Firewall rules for global limits.
+- Cron on the Hobby plan runs once per day.
+- No email delivery: Admins share the generated temporary passwords manually.

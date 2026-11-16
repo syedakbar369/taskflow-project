@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 
-/** API origin. Empty in local dev (Vite proxy); set VITE_API_URL in production (e.g. Render URL). */
+/** API origin. Empty in local dev (Vite proxy); set VITE_API_URL in production (your backend Vercel URL). */
 export const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 const TOKEN_KEY = 'tf_token';

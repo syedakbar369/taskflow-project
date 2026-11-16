@@ -3,7 +3,7 @@ import { Upload, X } from 'lucide-react';
 import { fileSize } from '../lib/format';
 
 export const ALLOWED_EXT = ['png', 'jpg', 'jpeg', 'webp', 'pdf', 'txt', 'csv', 'zip', 'mp4', 'log'];
-export const MAX_MB = 25;
+export const MAX_MB = Number(import.meta.env.VITE_MAX_UPLOAD_MB) || 25;
 
 export function checkFiles(files: File[], maxMb = MAX_MB): string | null {
   for (const f of files) {

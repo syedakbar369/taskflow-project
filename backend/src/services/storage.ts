@@ -2,13 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { env } from '../config/env';
 import { badRequest } from '../lib/errors';
 
 /**
- * Storage abstraction. Local disk is used for development; implement this interface with an
- * S3-compatible client (e.g. @aws-sdk/client-s3) to move to cloud object storage later.
+ * Storage abstraction.
+ * - LocalDiskStorage: development (files under UPLOAD_DIR).
+ * - VercelBlobStorage: production on Vercel (private Blob store; downloads still go through our
+ *   authorized /api/attachments/:id/download route, never a public URL).
  */
 export interface StorageDriver {
   save(buffer: Buffer, ext: string): Promise<string>;
@@ -17,6 +19,44 @@ export interface StorageDriver {
 }
 
 const KEY_RE = /^\d{4}\/\d{2}\/[a-f0-9]{32}\.[a-z0-9]{1,5}$/;
+
+/** Random, non-guessable key; the user's filename is never used as a storage path. */
+function newKey(ext: string) {
+  const now = new Date();
+  return `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${crypto.randomBytes(16).toString('hex')}.${ext}`;
+}
+
+export class VercelBlobStorage implements StorageDriver {
+  private prefix = 'taskflow/';
+  private check(key: string) {
+    if (!KEY_RE.test(key)) throw badRequest('Invalid storage key');
+    return this.prefix + key;
+  }
+  async save(buffer: Buffer, ext: string) {
+    const { put } = await import('@vercel/blob');
+    const key = newKey(ext);
+    await put(this.check(key), buffer, {
+      access: 'private',
+      contentType: CANONICAL_MIME[ext] ?? 'application/octet-stream',
+      addRandomSuffix: false,
+    });
+    return key;
+  }
+  async read(key: string) {
+    const { get } = await import('@vercel/blob');
+    const res = await get(this.check(key), { access: 'private' });
+    if (!res || res.statusCode !== 200 || !res.stream) throw new Error('Blob not found');
+    return Readable.fromWeb(res.stream as Parameters<typeof Readable.fromWeb>[0]);
+  }
+  async remove(key: string) {
+    try {
+      const { del } = await import('@vercel/blob');
+      await del(this.check(key));
+    } catch {
+      /* already gone */
+    }
+  }
+}
 
 export class LocalDiskStorage implements StorageDriver {
   private root: string;
@@ -30,10 +70,7 @@ export class LocalDiskStorage implements StorageDriver {
     return full;
   }
   async save(buffer: Buffer, ext: string) {
-    const now = new Date();
-    const key = `${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, '0')}/${crypto
-      .randomBytes(16)
-      .toString('hex')}.${ext}`;
+    const key = newKey(ext);
     const full = this.resolveKey(key);
     await fsp.mkdir(path.dirname(full), { recursive: true });
     await fsp.writeFile(full, buffer, { flag: 'wx' });
@@ -53,7 +90,12 @@ export class LocalDiskStorage implements StorageDriver {
   }
 }
 
-export const storage: StorageDriver = new LocalDiskStorage(env.UPLOAD_DIR);
+export const storage: StorageDriver =
+  env.storageDriver === 'vercel-blob' ? new VercelBlobStorage() : new LocalDiskStorage(env.isVercel ? '/tmp/uploads' : env.UPLOAD_DIR);
+
+if (env.isVercel && env.storageDriver === 'local') {
+  console.warn('[storage] Running on Vercel without a Blob store: uploads go to /tmp and will NOT persist. Connect a private Vercel Blob store.');
+}
 
 // ---------------------------------------------------------------------------
 // File validation: extension allowlist + MIME check + magic-byte sniffing.

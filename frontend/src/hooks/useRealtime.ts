@@ -72,6 +72,13 @@ export function useRealtime() {
     };
   }, [user, qc, toast]);
 
+  // Fallback: while the socket is down (e.g. serverless reconnect in progress), refresh visible data every 30s.
+  useEffect(() => {
+    if (!user || status === 'live') return;
+    const t = setInterval(() => void qc.invalidateQueries({ type: 'active' }), 30_000);
+    return () => clearInterval(t);
+  }, [status, user, qc]);
+
   useEffect(() => () => disconnectSocket(), []);
   return status;
 }
