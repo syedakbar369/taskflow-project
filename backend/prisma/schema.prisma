@@ -1,0 +1,301 @@
+// TaskFlow database schema (PostgreSQL / Neon)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Neon: DATABASE_URL = pooled connection, DIRECT_URL = direct (non-pooled) connection used for migrations.
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  QA
+  DEVELOPER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum QAStatus {
+  NOT_REQUIRED
+  PENDING // QA required, work not yet submitted
+  AWAITING_QA
+  IN_TESTING
+  PASSED
+  FAILED
+}
+
+enum TestResult {
+  PASSED
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(DEVELOPER)
+  isActive     Boolean  @default(true)
+  avatarUrl    String?
+  title        String?
+  // Incremented to invalidate all existing tokens (deactivation, role/password change).
+  tokenVersion Int      @default(0)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ownedProjects      Project[]       @relation("ProjectOwner")
+  memberships        ProjectMember[]
+  assignedTasks      Task[]          @relation("TaskAssignee")
+  qaAssignedTasks    Task[]          @relation("TaskQaAssignee")
+  reportedTasks      Task[]          @relation("TaskReporter")
+  submittedTasks     Task[]          @relation("TaskSubmitter")
+  approvedTasks      Task[]          @relation("TaskApprover")
+  comments           Comment[]
+  attachments        Attachment[]
+  qaReports          QAReport[]
+  activity           ActivityEvent[]
+  notifications      Notification[]  @relation("NotificationRecipient")
+  sentNotifications  Notification[]  @relation("NotificationActor")
+
+  @@index([role])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  key         String        @unique
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  color       String        @default("#F06A4A")
+  ownerId     String
+  startDate   DateTime?
+  dueDate     DateTime?
+  taskCounter Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  archivedAt  DateTime?
+
+  owner         User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  members       ProjectMember[]
+  tasks         Task[]
+  activity      ActivityEvent[]
+  notifications Notification[]
+
+  @@index([status])
+  @@index([ownerId])
+}
+
+model ProjectMember {
+  id          String   @id @default(cuid())
+  projectId   String
+  userId      String
+  projectRole String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model Task {
+  id            String     @id @default(cuid())
+  projectId     String
+  number        Int
+  title         String
+  description   String?
+  status        TaskStatus @default(TODO)
+  priority      Priority   @default(MEDIUM)
+  position      Float      @default(0)
+  assigneeId    String?
+  qaAssigneeId  String?
+  reporterId    String
+  startDate     DateTime?
+  dueDate       DateTime?
+  qaRequired    Boolean    @default(false)
+  qaStatus      QAStatus   @default(NOT_REQUIRED)
+  submittedById String?
+  submittedAt   DateTime?
+  qaApprovedById String?
+  qaApprovedAt  DateTime?
+  reopenedAt    DateTime?
+  reopenCount   Int        @default(0)
+  completedAt   DateTime?
+  archivedAt    DateTime?
+  dueSoonNotifiedAt DateTime?
+  overdueNotifiedAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee     User?           @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  qaAssignee   User?           @relation("TaskQaAssignee", fields: [qaAssigneeId], references: [id], onDelete: SetNull)
+  reporter     User            @relation("TaskReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  submittedBy  User?           @relation("TaskSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+  qaApprovedBy User?           @relation("TaskApprover", fields: [qaApprovedById], references: [id], onDelete: SetNull)
+  labels       TaskLabel[]
+  comments     Comment[]
+  attachments  Attachment[]
+  qaReports    QAReport[]
+  activity     ActivityEvent[]
+  notifications Notification[]
+
+  @@unique([projectId, number])
+  @@index([projectId, status, position])
+  @@index([assigneeId])
+  @@index([qaStatus])
+  @@index([dueDate])
+}
+
+model Label {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  color     String      @default("#64748B")
+  createdAt DateTime    @default(now())
+  tasks     TaskLabel[]
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+  task    Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label   Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  taskId    String
+  authorId  String
+  content   String
+  kind      String    @default("COMMENT") // COMMENT | FIX_NOTE | QA_NOTE
+  editedAt  DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+}
+
+model Attachment {
+  id           String   @id @default(cuid())
+  taskId       String
+  qaReportId   String?
+  uploaderId   String
+  originalName String
+  storageKey   String   @unique
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime @default(now())
+
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  qaReport QAReport? @relation(fields: [qaReportId], references: [id], onDelete: SetNull)
+  uploader User      @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([qaReportId])
+}
+
+// QA reports are immutable once submitted (no update endpoint exists).
+model QAReport {
+  id            String     @id @default(cuid())
+  taskId        String
+  testerId      String
+  title         String
+  summary       String
+  overallResult TestResult
+  notes         String?
+  submittedAt   DateTime   @default(now())
+
+  task        Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tester      User         @relation(fields: [testerId], references: [id], onDelete: Restrict)
+  testCases   QATestCase[]
+  attachments Attachment[]
+
+  @@index([taskId, submittedAt])
+  @@index([testerId])
+}
+
+model QATestCase {
+  id             String     @id @default(cuid())
+  qaReportId     String
+  title          String
+  steps          String?
+  expectedResult String?
+  actualResult   String?
+  result         TestResult
+  order          Int        @default(0)
+
+  qaReport QAReport @relation(fields: [qaReportId], references: [id], onDelete: Cascade)
+
+  @@index([qaReportId])
+}
+
+model ActivityEvent {
+  id        String   @id @default(cuid())
+  actorId   String?
+  projectId String?
+  taskId    String?
+  eventType String
+  details   Json?
+  createdAt DateTime @default(now())
+
+  actor   User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model Notification {
+  id               String    @id @default(cuid())
+  recipientId      String
+  actorId          String?
+  type             String
+  title            String
+  message          String
+  relatedProjectId String?
+  relatedTaskId    String?
+  readAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  recipient User     @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  project   Project? @relation(fields: [relatedProjectId], references: [id], onDelete: SetNull)
+  task      Task?    @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, readAt, createdAt])
+}

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Uploaded files (private user data)
+backend/uploads/
+uploads/
+
+# Logs & OS / editor files
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Vercel / misc
+.vercel
+playwright-report/
+test-results/
